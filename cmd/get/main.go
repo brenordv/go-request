@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/brenordv/go-request/internal/core"
-	"github.com/brenordv/go-request/internal/handlers"
+	"github.com/brenordv/go-request/internal/requesters"
 	"time"
 )
 
@@ -12,5 +12,5 @@ func main() {
 	fmt.Println("go-Request!::GET")
 	defer fmt.Printf("Done! Elapsed time: %s\n", time.Since(start))
 
-	handlers.ExecRequests("go-get.exe", core.HttpGet)
+	requesters.ExecRequests("go-get.exe", core.HttpGet)
 }
