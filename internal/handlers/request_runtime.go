@@ -7,11 +7,8 @@ import (
 	"github.com/brenordv/go-request/internal/models"
 	"github.com/brenordv/go-request/internal/parsers"
 	"github.com/brenordv/go-request/internal/utils"
-	"github.com/google/uuid"
 	"github.com/schollz/progressbar/v3"
-	"net/http"
 	"os"
-	"sync"
 )
 
 func ExecRequests(appName string, method string) {
@@ -44,118 +41,122 @@ func ExecRequests(appName string, method string) {
 }
 
 func getRequestRoutine(runtimeConfigFile string) {
+	var err error
 	runtimeConfig := utils.LoadRuntimeConfig(runtimeConfigFile)
 	PanicOnError(runtimeConfig.Get.Validate())
-	guard := make(chan struct{}, runtimeConfig.Get.MaxParallelRequests)
+	flowControl := models.FlowControl{
+		GuardChannel: make(chan struct{}, runtimeConfig.Get.MaxParallelRequests),
+	}
 
-	u := uuid.New()
-	sessionId := u.String()
-	fmt.Printf("Your session id is: %s\n", sessionId)
+	flowControl.GenerateSessionId()
+	fmt.Printf("Your session id is: %s\n", flowControl.SessionId)
 
-	req, err := runtimeConfig.Get.MakeRequest()
-
+	flowControl.Request, err = runtimeConfig.Get.MakeRequest()
 	PanicOnError(err)
 
-	var wg sync.WaitGroup
-	bar := progressbar.Default(int64(runtimeConfig.Get.NumRequests), "Making GET requests")
-	dbClient, err := db.NewDatabaseClient()
+	flowControl.ProgressBar = progressbar.Default(int64(runtimeConfig.Get.NumRequests), "Making GET requests")
+
+	flowControl.Db, err = db.NewDatabaseClient()
 	PanicOnError(err)
+
 	defer func(dbClient *db.DatabaseClient) {
 		_ = dbClient.Close()
-	}(dbClient)
-	dbClient.WaitForPromises = true
+	}(flowControl.Db)
+	flowControl.Db.WaitForPromises = true
 
 	for i := 0; i < runtimeConfig.Get.NumRequests; i++ {
-		guard <- struct{}{}
-		wg.Add(1)
-		go func(b *progressbar.ProgressBar, r *http.Request, w *sync.WaitGroup, index int, rtCfg *models.RuntimeConfig, g chan struct{}, dbc *db.DatabaseClient, sId string) {
-			defer IgnoreError(b.Add(1))
-			defer ReadIntoVoid(g)
+		flowControl.GuardChannel <- struct{}{}
+		flowControl.WaitGroup.Add(1)
+		go func(fc *models.FlowControl, index int, rtCfg *models.RuntimeConfig) {
+			defer IgnoreError(fc.ProgressBar.Add(1))
+			defer ReadIntoVoid(fc.GuardChannel)
 
 			client := rtCfg.Get.GetHttpClient()
 			defer client.CloseIdleConnections()
 
 			if rtCfg.Get.AggressiveMode {
-				w.Done()
+				fc.WaitGroup.Done()
 			} else {
-				defer w.Done()
+				defer fc.WaitGroup.Done()
 			}
 
-			dbc.PromiseWillAdd(1)
+			fc.Db.PromiseWillAdd(1)
 
-			url := r.URL.String()
-			httpRes, err := client.Do(r)
-			res := models.NewHttpResponse(url, sessionId, index, httpRes, err)
+			url := fc.Request.URL.String()
+			httpRes, err := client.Do(fc.Request)
+			res := models.NewHttpResponse(url, fc.SessionId, index, httpRes, err)
 
 			key, serialized, err := res.Serialize()
 			PanicOnError(err)
 
-			err = dbc.Add(key, serialized)
+			err = fc.Db.Add(key, serialized)
 			PanicOnError(err)
 
 			if res.IsInternalServerError {
 				fmt.Println(res.String())
 			}
 
-		}(bar, req, &wg, i, runtimeConfig, guard, dbClient, sessionId)
+		}(&flowControl, i, runtimeConfig)
 	}
-	wg.Wait()
+	flowControl.WaitGroup.Wait()
 }
 
 func postRequestRoutine(runtimeConfigFile string) {
+	var err error
 	runtimeConfig := utils.LoadRuntimeConfig(runtimeConfigFile)
 	PanicOnError(runtimeConfig.Post.Validate())
-	guard := make(chan struct{}, runtimeConfig.Post.MaxParallelRequests)
+	flowControl := models.FlowControl{
+		GuardChannel: make(chan struct{}, runtimeConfig.Post.MaxParallelRequests),
+	}
 
-	u := uuid.New()
-	sessionId := u.String()
-	fmt.Printf("Your session id is: %s\n", sessionId)
+	flowControl.GenerateSessionId()
+	fmt.Printf("Your session id is: %s\n", flowControl.SessionId)
 
-	var wg sync.WaitGroup
-	bar := progressbar.Default(int64(runtimeConfig.Post.NumRequests), "Making POST requests")
-	dbClient, err := db.NewDatabaseClient()
+	flowControl.Request, err = runtimeConfig.Post.MakeRequest()
 	PanicOnError(err)
+
+	flowControl.ProgressBar = progressbar.Default(int64(runtimeConfig.Post.NumRequests), "Making POST requests")
+	flowControl.Db, err = db.NewDatabaseClient()
+	PanicOnError(err)
+
 	defer func(dbClient *db.DatabaseClient) {
 		_ = dbClient.Close()
-	}(dbClient)
-	dbClient.WaitForPromises = true
+	}(flowControl.Db)
+	flowControl.Db.WaitForPromises = true
 
 	for i := 0; i < runtimeConfig.Post.NumRequests; i++ {
-		guard <- struct{}{}
-		wg.Add(1)
-		go func(b *progressbar.ProgressBar, w *sync.WaitGroup, index int, rtCfg *models.RuntimeConfig, g chan struct{}, dbc *db.DatabaseClient, sId string) {
-			defer IgnoreError(b.Add(1))
-			defer ReadIntoVoid(g)
+		flowControl.GuardChannel <- struct{}{}
+		flowControl.WaitGroup.Add(1)
+		go func(fc *models.FlowControl, index int, rtCfg *models.RuntimeConfig) {
+			defer IgnoreError(fc.ProgressBar.Add(1))
+			defer ReadIntoVoid(fc.GuardChannel)
 
 			client := rtCfg.Post.GetHttpClient()
 			defer client.CloseIdleConnections()
 
-			req, err := runtimeConfig.Post.MakeRequest()
-			PanicOnError(err)
-
 			if rtCfg.Post.AggressiveMode {
-				w.Done()
+				fc.WaitGroup.Done()
 			} else {
-				defer w.Done()
+				defer fc.WaitGroup.Done()
 			}
 
-			dbc.PromiseWillAdd(1)
+			fc.Db.PromiseWillAdd(1)
 
-			url := req.URL.String()
-			httpRes, err := client.Do(req)
-			res := models.NewHttpResponse(url, sessionId, index, httpRes, err)
+			url := fc.Request.URL.String()
+			httpRes, err := client.Do(fc.Request)
+			res := models.NewHttpResponse(url, fc.SessionId, index, httpRes, err)
 
 			key, serialized, err := res.Serialize()
 			PanicOnError(err)
 
-			err = dbc.Add(key, serialized)
+			err = fc.Db.Add(key, serialized)
 			PanicOnError(err)
 
 			if res.IsInternalServerError {
 				fmt.Println(res.String())
 			}
 
-		}(bar, &wg, i, runtimeConfig, guard, dbClient, sessionId)
+		}(&flowControl, i, runtimeConfig)
 	}
-	wg.Wait()
+	flowControl.WaitGroup.Wait()
 }
