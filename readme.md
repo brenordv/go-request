@@ -1,4 +1,14 @@
 # go-request!
+[![Security Rating](https://sonarcloud.io/api/project_badges/measure?project=brenordv_go-request&metric=security_rating)](https://sonarcloud.io/summary/new_code?id=brenordv_go-request)
+[![Maintainability Rating](https://sonarcloud.io/api/project_badges/measure?project=brenordv_go-request&metric=sqale_rating)](https://sonarcloud.io/summary/new_code?id=brenordv_go-request)
+[![Reliability Rating](https://sonarcloud.io/api/project_badges/measure?project=brenordv_go-request&metric=reliability_rating)](https://sonarcloud.io/summary/new_code?id=brenordv_go-request)
+
+[![Bugs](https://sonarcloud.io/api/project_badges/measure?project=brenordv_go-request&metric=bugs)](https://sonarcloud.io/summary/new_code?id=brenordv_go-request)
+[![Code Smells](https://sonarcloud.io/api/project_badges/measure?project=brenordv_go-request&metric=code_smells)](https://sonarcloud.io/summary/new_code?id=brenordv_go-request)
+[![Duplicated Lines (%)](https://sonarcloud.io/api/project_badges/measure?project=brenordv_go-request&metric=duplicated_lines_density)](https://sonarcloud.io/summary/new_code?id=brenordv_go-request)
+[![Technical Debt](https://sonarcloud.io/api/project_badges/measure?project=brenordv_go-request&metric=sqale_index)](https://sonarcloud.io/summary/new_code?id=brenordv_go-request)
+[![Vulnerabilities](https://sonarcloud.io/api/project_badges/measure?project=brenordv_go-request&metric=vulnerabilities)](https://sonarcloud.io/summary/new_code?id=brenordv_go-request)
+
 This is a simple application to make batch GET and POST requests.
 
 ## How to use
